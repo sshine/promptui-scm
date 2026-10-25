@@ -1,0 +1,38 @@
+# The full check suite, as individually named steps.
+#
+# The single source of truth for what CI verifies. Deliberately not one `just ci`
+# call: the recipe is the local entry point, but one step per check is what makes a
+# red run legible at a glance.
+name: Run checks
+description: Run formatting, whitespace, lint, test and package checks.
+
+runs:
+  using: composite
+  steps:
+    - name: Check formatting
+      shell: bash
+      run: nix develop -c just fmt-check
+
+    - name: Check whitespace
+      shell: bash
+      run: nix develop -c just whitespace
+
+    - name: Lint
+      shell: bash
+      run: nix develop -c just lint
+
+    - name: Test
+      shell: bash
+      run: nix develop -c just test
+
+    - name: Compile
+      shell: bash
+      run: nix develop -c just build
+
+    # Builds the package and runs the suite again inside the sandbox, which has no
+    # network and no writable home. That difference has caught real bugs that the
+    # dev shell cannot: a credential write that failed an unrelated evaluation, and
+    # a width table that silently depended on the locale.
+    - name: Build the package
+      shell: bash
+      run: nix build .#default --print-build-logs
