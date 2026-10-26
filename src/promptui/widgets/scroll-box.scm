@@ -30,6 +30,7 @@
             scroll-box-page-up!
             scroll-box-page-down!
             scroll-box-scroll-to-bottom!
+            scroll-box-set-offset!
             scroll-box-at-bottom?
             scroll-box-handle-mouse!
             scroll-box-render!))
@@ -79,6 +80,11 @@
 (define (scroll-box-page-down! sb) (scroll-box-scroll-down! sb (half-viewport sb)))
 
 (define (scroll-box-scroll-to-bottom! sb) (set-offset! sb 0))
+
+(define (scroll-box-set-offset! sb n)
+  "Put the view N rows up from the bottom. It is clamped when the box is next drawn,
+against the content as it is then, not as it was last time."
+  (set-offset! sb (max 0 n)))
 (define (scroll-box-at-bottom? sb) (zero? (scroll-box-offset sb)))
 
 (define (scroll-box-render! sb area buf content)

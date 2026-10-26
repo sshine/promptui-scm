@@ -9,6 +9,7 @@
   #:use-module (promptui style)
   #:use-module (promptui rect)
   #:use-module (promptui buffer)
+  #:use-module (promptui width)
   #:use-module (promptui wrap)
   #:use-module (srfi srfi-1)
   #:use-module (srfi srfi-9)
@@ -25,6 +26,7 @@
             text-height
             text-first-line
             wrap-line
+            marked-lines
             render-line!
             render-paragraph!))
 
@@ -103,6 +105,23 @@ of those, each element of the list being one line."
   (let ((spans (line-spans l)))
     (map (lambda (r) (%line (slice-spans spans (car r) (cdr r))))
          (wrap-ranges (line-plain l) width))))
+
+(define* (marked-lines marker text width #:key (marker-style %reset-style)
+                       (style %reset-style))
+  "TEXT wrapped into WIDTH columns behind MARKER: the marker before the first line,
+and every later line indented to start where the first one did. STYLE is laid
+under every span of TEXT, so the lines carry their whole style with them."
+  (let* ((indent (string-width marker))
+         (room (max 1 (- width indent)))
+         (pad (make-string indent #\space))
+         (visual (append-map (lambda (l) (wrap-line l room)) (->text text))))
+    (map (lambda (l i)
+           (%line (cons (if (zero? i) (styled marker marker-style) (styled pad style))
+                        (map (lambda (s)
+                               (styled (span-content s) (style-patch style (span-style s))))
+                             (line-spans l)))))
+         (if (null? visual) (list (%line '())) visual)
+         (iota (max 1 (length visual))))))
 
 (define* (render-line! buf x y l #:key (style %reset-style) x-max)
   "Draw one line of spans from X,Y, each span patched over STYLE. Returns the column

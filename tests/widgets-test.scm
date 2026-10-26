@@ -8,6 +8,8 @@
              (promptui theme)
              (promptui padding)
              (promptui input)
+             (promptui reactive)
+             (promptui widgets log-view)
              (promptui widgets scrollbar)
              (promptui widgets scroll-box)
              (promptui widgets spinner)
@@ -84,6 +86,73 @@
                            (make-scrollable (const 5) (lambda (area buf offset) #f)))
        (test-assert (not (scroll-box-handle-mouse! sb (make-mouse 'press 9 0 #:button 'left))))))
 
+
+   (test-group "marked lines hang their text after the marker"
+     (test-equal '("● one two" "  three" "  four")
+       (map string-trim-right (map line-plain (marked-lines "● " "one two three four" 10))))
+     (test-equal '("● ") (map line-plain (marked-lines "● " "" 9)))
+     (test-equal '("● a" "  " "  b") (map line-plain (marked-lines "● " "a\n\nb" 9))))
+
+   (test-group "the log view redraws only the component whose cell changed"
+     (let* ((lv (make-log-view))
+            (sb (make-scroll-box))
+            (cells (map make-cell '("one" "two" "three")))
+            (items (map (lambda (c) (cons c (lambda (w) (cell-ref c)))) cells))
+            (draw (lambda* (#:key (width 20) (epoch 0))
+                    (map string-trim-right
+                         (render-lines width 5
+                                       (lambda (area buf)
+                                         (log-view-render! lv sb area buf items
+                                                           #:epoch epoch)))))))
+       (test-equal '("one" "" "two" "" "three") (draw))
+       (test-equal 3 (log-view-renders lv))
+       (draw)
+       (test-equal 3 (log-view-renders lv))
+       (cell-set! (cadr cells) "TWO")
+       (test-equal '("one" "" "TWO" "" "three") (draw))
+       (test-equal 4 (log-view-renders lv))
+       ;; A new width or a new epoch is everything changing.
+       (draw #:width 30)
+       (test-equal 7 (log-view-renders lv))
+       (draw #:width 30 #:epoch 1)
+       (test-equal 10 (log-view-renders lv))
+       ;; A component that raises costs its own line.
+       (let ((bad (list (cons 'bad (lambda (w) (error "no"))))))
+         (test-assert
+          (string-contains
+           (car (render-lines 30 1 (lambda (area buf) (log-view-render! lv sb area buf bad))))
+           "raised")))))
+
+   (test-group "a click maps back to the component drawn there"
+     (let* ((lv (make-log-view))
+            (sb (make-scroll-box))
+            (items (list (cons 'a (const "a1\na2")) (cons 'b (const "b1")))))
+       (render-lines 20 5 (lambda (area buf) (log-view-render! lv sb area buf items)))
+       (test-eq 'a (log-view-key-at lv 0 1))
+       (test-equal #f (log-view-key-at lv 0 2))
+       (test-eq 'b (log-view-key-at lv 3 3))
+       (test-equal #f (log-view-key-at lv 0 4))))
+
+   (test-group "scrolled up, the view holds still while the log below it grows"
+     (let* ((lv (make-log-view #:gap 0))
+            (sb (make-scroll-box))
+            (tail (make-cell "t1"))
+            (items (append (map (lambda (n) (cons n (const (format #f "row ~a" n))))
+                                (iota 10))
+                           (list (cons 'tail (lambda (w) (cell-ref tail))))))
+            ;; The last column is the scrollbar.
+            (draw (lambda ()
+                    (map (lambda (row) (string-trim-right (substring row 0 19)))
+                         (render-lines 20 3 (lambda (area buf)
+                                              (log-view-render! lv sb area buf items)))))))
+       (draw)
+       (scroll-box-scroll-up! sb 4)
+       (test-equal '("row 4" "row 5" "row 6") (draw))
+       (cell-set! tail "t1\nt2\nt3")
+       (test-equal '("row 4" "row 5" "row 6") (draw))
+       ;; At the bottom it follows the tail instead.
+       (scroll-box-scroll-to-bottom! sb)
+       (test-equal '("t1" "t2" "t3") (draw))))
 
    (test-group "spinner"
      (let ((s (make-spinner %breathing-dot)))
